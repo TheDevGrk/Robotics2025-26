@@ -1,0 +1,18 @@
+#ifndef CHASSIS_HPP
+#define CHASSIS_HPP
+
+#include "pros/motor_group.hpp"
+#include "pros/rotation.hpp"
+#include "pros/imu.hpp"
+
+extern pros::MotorGroup left;
+extern pros::MotorGroup right;
+extern pros::IMU imu;
+extern pros::Rotation vertOdom;
+extern pros::Rotation horztOdom;
+
+void arcadeDrive(int lateral, int angular);
+void angularPID(int turnDistance);
+void setBrakeMode(pros::motor_brake_mode_e mode);
+
+#endif // CHASSIS_HPP
