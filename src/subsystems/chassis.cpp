@@ -1,7 +1,6 @@
 #include "subsystems/chassis.hpp"
 #include "pros/colors.hpp"
 #include "pros/imu.hpp"
-#include "pros/llemu.hpp"
 #include "pros/motor_group.hpp"
 #include "pros/motors.h"
 #include "pros/rotation.hpp"
@@ -18,6 +17,9 @@ pros::MotorGroup right({-19, 11, 3});
 pros::IMU imu(1);
 pros::Rotation vertOdom(-14);
 pros::Rotation horztOdom(-18);
+
+pros::Controller controller(pros::E_CONTROLLER_MASTER);
+
 
 void arcadeDrive(int lateral, int angular){
     left.move(lateral - angular);
@@ -69,9 +71,9 @@ void graphPID(std::vector<int> errorHistory, std::vector<float> powerHistory, in
 
 void angularPID(int turnDistance){//PID to control angular motions, takes turnDistance is how far to turn (+ clockwise)
     //define pid constants
-    float kP = 0.5;
+    float kP = 1.5;
     float kI = 0;
-    float kD = 0;
+    float kD = 10;
 
     float error = 0; // angular distance from target
     float prevError = 0;
@@ -107,9 +109,14 @@ void angularPID(int turnDistance){//PID to control angular motions, takes turnDi
 
 
         // exit pid loop if within acceptable error
-        if (error > -1 && error < 1 && derivative < 0.3 && derivative > -0.3) break;
+        if (error > -1 && error < 1 && derivative < 0.3 && derivative > -0.3){
+            break;
+        }
 
         prevError = error;
+
+        left.move(-output);
+        right.move(output);
 
         //update histories and current time
         errorHistory.push_back(error);
@@ -119,6 +126,73 @@ void angularPID(int turnDistance){//PID to control angular motions, takes turnDi
         //graph the PIDs 
         graphPID(errorHistory, powerHistory, turnDistance, error, currentTime);
 
+		controller.print(0, 0, "IMU: %f", imu.get_heading());
+		controller.print(1, 0, "Dis: %f", currentDistance);
+		controller.print(2, 0, "Err: %f", error);
+
+        pros::delay(15);
+    }
+
+    left.brake();
+    right.brake();
+}
+
+void lateralPID(int driveDistance){//PID to control lateral motions, takes driveDistance is how far to drive (+ forward)
+    //define pid constants
+    float kP = 0.5;
+    float kI = 0;
+    float kD = 0;
+
+    float error = 0; // lateral distance from target
+    float prevError = 0;
+    float integral = 0;
+    float derivative = 0;
+    float initialPose = vertOdom.get_position();
+
+    float output = 0 ;
+    float prevOutput = 0;
+
+    //lists for
+    std::vector<int> errorHistory; //keep track of error over time
+    std::vector<float> powerHistory; //keep track of motor power over time
+    int currentTime = 0; //keep track of time over time (wow!)
+
+    forever{
+        // best to calculate distance traveled using odom wheels
+        float currentDistance = vertOdom.get_position() - initialPose;
+        error = driveDistance - currentDistance;
+
+        // enables integral if between -10 and 10 degree error
+        if (error < 10 && error > -10){
+            integral += error; //calculate integral aka area underneath the error vs time graph
+        }
+
+        derivative = error - prevError; //calculate derivative aka instantaneous ROC at of error vs time graph
+
+        // calculate motor voltage
+        output = (kP * error) + (kI * integral) + (kD * derivative);
+
+        //clamp output
+        if (output > 127) output = 127;
+        if (output < -127) output = -127;
+
+
+        // exit pid loop if within acceptable error
+        if (error > -1 && error < 1 && derivative < 0.3 && derivative > -0.3) break;
+
+        prevError = error;
+
+        left.move(output);
+        right.move(output);
+
+        //update histories and current time
+        errorHistory.push_back(error);
+        powerHistory.push_back(std::abs(output));
+        currentTime += 20;
+
+        //graph the PIDs 
+        graphPID(errorHistory, powerHistory, driveDistance, error, currentTime);
+
         pros::delay(15);
     }
 
@@ -127,10 +201,8 @@ void angularPID(int turnDistance){//PID to control angular motions, takes turnDi
 }
 
 void setBrakeMode(pros::motor_brake_mode_e mode){
-    left.set_brake_mode(mode);
-    right.set_brake_mode(mode);
-
-    pros::lcd::print(1, "Successfully set brake mode");
+    left.set_brake_mode_all(mode);
+    right.set_brake_mode_all(mode);
 }
 
 

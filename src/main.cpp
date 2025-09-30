@@ -6,7 +6,6 @@
 
 
 // Device Declarations
-pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
 /**
  * A callback function for LLEMU's center button.
@@ -37,7 +36,7 @@ void initialize() {
 	setBrakeMode(pros::E_MOTOR_BRAKE_BRAKE);
 
 	pros::lcd::register_btn1_cb(on_center_button);
-	
+	controller.rumble("..");
 }
 
 /**
@@ -86,17 +85,15 @@ void autonomous() {}
  */
 void opcontrol() {
 	while (true) {
-		pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
-		                 (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
-		                 (pros::lcd::read_buttons() & LCD_BTN_RIGHT) >> 0);  // Prints status of the emulated screen LCDs
-
 		if(controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
             angularPID(180);
         }
 
+		controller.print(0, 0, "IMU: %f", imu.get_heading());
+
 		// Arcade control scheme
 		int lateral = controller.get_analog(ANALOG_LEFT_Y);    // Gets amount forward/backward from left joystick
-		int angular = controller.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick
+		int angular = -0.8 * controller.get_analog(ANALOG_RIGHT_X);  // Gets the turn left/right from right joystick
 		arcadeDrive(lateral, angular);
 		pros::delay(20);                               // Run for 20 ms then update
 	}
