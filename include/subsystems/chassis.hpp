@@ -15,6 +15,7 @@ extern pros::Controller controller;
 
 void arcadeDrive(int lateral, int angular);
 void angularPID(int turnDistance);
+void lateralPID(double driveDistance, float kP, float kI, float kD);
 void setBrakeMode(pros::motor_brake_mode_e mode);
 
 #endif // CHASSIS_HPP

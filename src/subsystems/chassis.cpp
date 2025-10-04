@@ -6,6 +6,9 @@
 #include "pros/rotation.hpp"
 #include "pros/screen.h"
 #include "pros/screen.hpp"
+#include <chrono>
+#include <ctime>
+#include <math.h>
 
 
 // pre-processor macros
@@ -20,13 +23,15 @@ pros::Rotation horztOdom(-18);
 
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
+const float wheelDiameter = 2.75; //odom wheel diameter in inches
+const float wheelCircumference = wheelDiameter * M_PI; //odom wheel circumference in inches
 
-void arcadeDrive(int lateral, int angular){
-    left.move(lateral - angular);
-    right.move(lateral + angular);
-}
+float rXPos = 0;
+float rYPos = 0;
+float theta = 0;
+float aXPos = 0;
+float aYPos = 0;
 
-//graphing data, used for PID tuning
 void graphPID(std::vector<int> errorHistory, std::vector<float> powerHistory, int goal, float error, int time) {
   //goal is the PID goal (driveDistance)
   //error history is a list of all of the errors (range is 0 to driveDistance)
@@ -70,31 +75,35 @@ void graphPID(std::vector<int> errorHistory, std::vector<float> powerHistory, in
 }
 
 void angularPID(int turnDistance){//PID to control angular motions, takes turnDistance is how far to turn (+ clockwise)
-    //define pid constants
-    float kP = 1.5;
-    float kI = 0;
-    float kD = 10;
-
+    // define PID constants
+    float kP = 1.723;
+    float kD = 10.555;
+    float kI = 0.03;
+    
     float error = 0; // angular distance from target
     float prevError = 0;
     float integral = 0;
     float derivative = 0;
-    float initialAngle = imu.get_heading();
+    float initialAngle = imu.get_rotation();
 
     float output = 0 ;
     float prevOutput = 0;
+
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     //lists
     std::vector<int> errorHistory; //keep track of error over time
     std::vector<float> powerHistory; //keep track of motor power over time
     int currentTime = 0; //keep track of time over time (wow!)
+    setBrakeMode(pros::E_MOTOR_BRAKE_COAST);
 
     forever{
-        float currentDistance = initialAngle - imu.get_heading();
+        float currentDistance = initialAngle - imu.get_rotation();
         error = turnDistance - currentDistance;
+        // printf("Error: %f\nCurrentDistance: %f\nInitial: %f\nIMU: %f", error, currentDistance, initialAngle, imu.get_heading());
 
         // enables integral if between -10 and 10 degree error
-        if (error < 10 && error > -10){
+        if (error < 15 && error > -15){
             integral += error; //calculate integral aka area underneath the error vs time graph
         }
 
@@ -109,7 +118,8 @@ void angularPID(int turnDistance){//PID to control angular motions, takes turnDi
 
 
         // exit pid loop if within acceptable error
-        if (error > -1 && error < 1 && derivative < 0.3 && derivative > -0.3){
+        if ((error > -2.5 && error < 2.5 && derivative < 0.3 && derivative > -0.3) || std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - startTime).count() > 1){
+            controller.clear();
             break;
         }
 
@@ -135,19 +145,20 @@ void angularPID(int turnDistance){//PID to control angular motions, takes turnDi
 
     left.brake();
     right.brake();
+    setBrakeMode(pros::E_MOTOR_BRAKE_HOLD);
 }
 
-void lateralPID(int driveDistance){//PID to control lateral motions, takes driveDistance is how far to drive (+ forward)
-    //define pid constants
-    float kP = 0.5;
-    float kI = 0;
-    float kD = 0;
+void lateralPID(double driveDistance, float kP = 1, float kI = 0, float kD = 0){//PID to control lateral motions, takes driveDistance is how far to drive in inches (+ forward) relative to the robot
+
+    driveDistance = (driveDistance / wheelCircumference) * 360.0; //convert inches to degrees of wheel rotation
 
     float error = 0; // lateral distance from target
     float prevError = 0;
     float integral = 0;
     float derivative = 0;
-    float initialPose = vertOdom.get_position();
+    float initialPose = vertOdom.get_position() / 100.0;
+
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     float output = 0 ;
     float prevOutput = 0;
@@ -159,11 +170,11 @@ void lateralPID(int driveDistance){//PID to control lateral motions, takes drive
 
     forever{
         // best to calculate distance traveled using odom wheels
-        float currentDistance = vertOdom.get_position() - initialPose;
+        float currentDistance = (vertOdom.get_position() / 100.0) - initialPose;
         error = driveDistance - currentDistance;
 
-        // enables integral if between -10 and 10 degree error
-        if (error < 10 && error > -10){
+        // enables integral if between -200 and 200 degree error
+        if (error < 200 && error > -200){
             integral += error; //calculate integral aka area underneath the error vs time graph
         }
 
@@ -178,7 +189,9 @@ void lateralPID(int driveDistance){//PID to control lateral motions, takes drive
 
 
         // exit pid loop if within acceptable error
-        if (error > -1 && error < 1 && derivative < 0.3 && derivative > -0.3) break;
+        if ((error > -10 && error < 10) || std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - startTime).count() > 3){
+            break;
+        }
 
         prevError = error;
 
@@ -204,5 +217,12 @@ void setBrakeMode(pros::motor_brake_mode_e mode){
     left.set_brake_mode_all(mode);
     right.set_brake_mode_all(mode);
 }
+void arcadeDrive(int lateral, int angular){
+    left.move(lateral - angular);
+    right.move(lateral + angular);
+}
 
+void updatePose(){
+    // find relative position of the bot
 
+}
